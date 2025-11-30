@@ -1,90 +1,80 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import ReactPaginate from 'react-paginate';
+import { useDebounce } from 'use-debounce';
 import css from './App.module.css';
-import SearchBar from '../SearchBar/SearchBar.tsx';
-import MovieGrid from '../MovieGrid/MovieGrid.tsx';
-import Loader from '../Loader/Loader.tsx';
-import ErrorMessage from '../ErrorMessage/ErrorMessage.tsx';
-import MovieModal from '../MovieModal/MovieModal.tsx';
-import toast from 'react-hot-toast';
-import { fetchMovies, type TMDBSearchResponse } from '../../services/movieService.ts';
-import type { Movie } from '../../types/movie.ts';
+import SearchBox from '../SearchBox/SearchBox';
+import Pagination from '../Pagination/Pagination';
+import NoteList from '../NoteList/NoteList';
+import Modal from '../Modal/Modal';
+import NoteForm from '../NoteForm/NoteForm';
+import Loader from '../Loader/Loader';
+import ErrorMessage from '../ErrorMessage/ErrorMessage';
+import { fetchNotes } from '../../services/noteService';
+import type { FetchNotesResponse } from '../../services/noteService';
+
+
+const PER_PAGE = 12;
 
 export default function App() {
-  const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
-  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+  const [search, setSearch] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [debouncedSearch] = useDebounce(search, 500);
+  const { data, isLoading, isError, isFetching } =
+    useQuery<FetchNotesResponse>({
+      queryKey: ['notes', page, debouncedSearch],
+      queryFn: () =>
+        fetchNotes({
+          page,
+          perPage: PER_PAGE,
+          search: debouncedSearch || undefined,
+        }),
+    });
 
-  const handleSearch = useCallback((newQuery: string) => {
-    setQuery(newQuery);
-    setPage(1);
-    setSelectedMovie(null);
-  }, []);
+  const notes = data?.notes ?? [];
+  const totalPages = data?.totalPages ?? 0;
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(1); 
+  };
 
-  const {
-    data,
-    isLoading,
-    isError,
-    isFetching,
-  } = useQuery<TMDBSearchResponse>({
-    queryKey: ['movies', query, page],
-    queryFn: () => fetchMovies(query, page),
-    enabled: Boolean(query),
-    retry: 1,
-  });
+  const handleOpenModal = () => setIsModalOpen(true);
+  const handleCloseModal = () => setIsModalOpen(false);
 
-  const movies = data?.results ?? [];
-  const totalPages = data?.total_pages ?? 0;
-
- 
-  useEffect(() => {
-    if (!query) return;
-    if (isLoading || isFetching) return;
-    if (data && movies.length === 0 && !isError) {
-      toast('No movies found for your request.');
-    }
-  }, [query, data, movies.length, isLoading, isFetching, isError]);
-
-  const canShowGrid = !isLoading && !isError && movies.length > 0;
-
-  const handleSelectMovie = useCallback((movie: Movie) => {
-    setSelectedMovie(movie);
-  }, []);
-
-  const handleCloseModal = useCallback(() => {
-    setSelectedMovie(null);
-  }, []);
+  const showList = notes.length > 0;
+  const showPagination = totalPages > 1;
 
   return (
     <div className={css.app}>
-      <SearchBar onSubmit={handleSearch} />
+      <header className={css.toolbar}>
+        <SearchBox value={search} onChange={handleSearchChange} />
+
+        {showPagination && (
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onChange={setPage}
+          />
+        )}
+
+        <button
+          type="button"
+          className={css.button}
+          onClick={handleOpenModal}
+        >
+          Create note +
+        </button>
+      </header>
 
       {isLoading && <Loader />}
       {isError && <ErrorMessage />}
+      {!isLoading && !isError && showList && <NoteList notes={notes} />}
+      {isFetching && !isLoading && <Loader />}
 
-      {canShowGrid && (
-        <>
-          {totalPages > 1 && (
-            <ReactPaginate
-              pageCount={totalPages}
-              pageRangeDisplayed={5}
-              marginPagesDisplayed={1}
-              onPageChange={({ selected }) => setPage(selected + 1)}
-              forcePage={page - 1}
-              containerClassName={css.pagination}
-              activeClassName={css.active}
-              nextLabel="→"
-              previousLabel="←"
-            />
-          )}
-
-          <MovieGrid movies={movies} onSelect={handleSelectMovie} />
-        </>
-      )}
-
-      {selectedMovie && (
-        <MovieModal movie={selectedMovie} onClose={handleCloseModal} />
+      {isModalOpen && (
+        <Modal onClose={handleCloseModal}>
+          <NoteForm onClose={handleCloseModal} />
+        </Modal>
       )}
     </div>
   );
