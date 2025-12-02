@@ -12,7 +12,6 @@ import ErrorMessage from '../ErrorMessage/ErrorMessage';
 import { fetchNotes } from '../../services/noteService';
 import type { FetchNotesResponse } from '../../services/noteService';
 
-
 const PER_PAGE = 12;
 
 export default function App() {
@@ -20,6 +19,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [debouncedSearch] = useDebounce(search, 500);
+
   const { data, isLoading, isError, isFetching } =
     useQuery<FetchNotesResponse>({
       queryKey: ['notes', page, debouncedSearch],
@@ -29,13 +29,15 @@ export default function App() {
           perPage: PER_PAGE,
           search: debouncedSearch || undefined,
         }),
+      placeholderData: (prev) => prev,
     });
 
   const notes = data?.notes ?? [];
   const totalPages = data?.totalPages ?? 0;
+
   const handleSearchChange = (value: string) => {
     setSearch(value);
-    setPage(1); 
+    setPage(1);
   };
 
   const handleOpenModal = () => setIsModalOpen(true);
